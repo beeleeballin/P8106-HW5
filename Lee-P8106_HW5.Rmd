@@ -4,3 +4,160 @@ author: "Brian Jo Hsuan Lee"
 date: "4/28/2022"
 output: pdf_document
 ---
+
+Load packages
+```{r}
+library(tidyverse)
+library(caret)
+library(ISLR)
+library(factoextra)
+```
+
+```{r}
+data = read_csv("auto.csv", col_types = "fdiidfff") %>% 
+  mutate(
+    cylinders = fct_relevel(cylinders, "3", "4", "5", "6", "8"),
+    origin = fct_relevel(origin, "1", "2", "3")
+  )
+
+set.seed(2022)
+rowTrain = createDataPartition(y = data$mpg_cat,
+                               p = 0.7,
+                               list = FALSE)
+```
+
+```{r}
+ctrl = trainControl(method = "cv")
+
+# kernlab
+set.seed(2022)
+svml.fit = train(mpg_cat ~ . , 
+                 data = data[rowTrain,], 
+                 method = "svmLinear",
+                 # preProcess = c("center", "scale"),
+                 tuneGrid = data.frame(C = exp(seq(-5,2,len=50))),
+                 trControl = ctrl)
+
+plot(svml.fit, highlight = TRUE, xTrans = log)
+
+# e1071
+set.seed(2022)
+svml.fit2 = train(mpg_cat ~ . , 
+                  data = data[rowTrain,], 
+                  method = "svmLinear2",
+                  tuneGrid = data.frame(cost = exp(seq(-5,2,len=50))),
+                  trControl = ctrl)
+
+plot(svml.fit2, highlight = TRUE, xTrans = log)
+```
+
+
+```{r, fig.width=15, fig.height=8}
+svmr.grid = expand.grid(C = exp(seq(-1, 4, len = 20)),
+                        sigma = exp(seq(-9, 0, len = 50)))
+
+# tunes over both cost and sigma
+set.seed(2022)             
+svmr.fit = train(mpg_cat ~ . ,
+                 data = data, 
+                 subset = rowTrain,
+                 method = "svmRadialSigma",
+                 tuneGrid = svmr.grid,
+                 trControl = ctrl)
+
+myCol = rainbow(20)
+myPar = list(superpose.symbol = list(col = myCol),
+             superpose.line = list(col = myCol))
+
+plot(svmr.fit, highlight = TRUE, par.settings = myPar)
+
+# tune over cost and uses a single value of sigma based on kernlab's sigest function
+set.seed(2022)             
+svmr.fit2 = train(mpg_cat ~ . ,
+                  data = data, 
+                  subset = rowTrain,
+                  method = "svmRadialCost",
+                  tuneGrid = data.frame(C = exp(seq(-3, 3, len = 20))),
+                  trControl = ctrl)
+
+# Platt’s probabilistic outputs; use with caution
+set.seed(2022)             
+svmr.fit3 = train(mpg_cat ~ . ,
+                  data = data, 
+                  subset = rowTrain,
+                  method = "svmRadialCost",
+                  tuneGrid = data.frame(C = exp(seq(-3, 3, len = 20))),
+                  trControl = ctrl,
+                  prob.model = TRUE) 
+# predict(svmr.fit3, newdata = x_test, type = "prob")
+
+set.seed(2022)             
+rpart.fit = train(mpg_cat ~ . , 
+                   data = data, 
+                   subset = rowTrain,
+                   method = "rpart",
+                   tuneLength = 50,
+                   trControl = ctrl)
+```
+
+```{r}
+resamp = resamples(list(svml = svml.fit, svml2 = svml.fit2,
+                        svmr = svmr.fit, svmr2 = svmr.fit2,
+                        svmr3 = svmr.fit3, rpart = rpart.fit))
+bwplot(resamp)
+```
+
+We finally look at the test data performance.
+```{r}
+pred.svml = predict(svml.fit, newdata = data[-rowTrain,])
+pred.svmr = predict(svmr.fit, newdata = data[-rowTrain,])
+
+confusionMatrix(data = pred.svml, 
+                reference = data$mpg_cat[-rowTrain])
+
+confusionMatrix(data = pred.svmr, 
+                reference = data$mpg_cat[-rowTrain])
+```
+
+Load US Arrest dataset
+```{r}
+data2 = 
+  USArrests
+```
+
+```{r}
+hc.complete = hclust(dist(data2), method = "complete")
+
+fviz_dend(hc.complete, k = 3,        
+          cex = 0.3, 
+          palette = "jco", 
+          color_labels_by_k = TRUE,
+          rect = TRUE, rect_fill = TRUE, rect_border = "jco",
+          labels_track_height = 2.5)
+
+ind4.complete = cutree(hc.complete, 3)
+
+# Who are in the third cluster?
+data2[ind4.complete == 3,]
+```
+
+```{r}
+data2_std = 
+  USArrests %>% 
+  mutate_all(~(scale(.) %>% as.vector))
+
+hc.complete_2 = hclust(dist(data2_std), method = "complete")
+
+fviz_dend(hc.complete_2, k = 3,        
+          cex = 0.3, 
+          palette = "jco", 
+          color_labels_by_k = TRUE,
+          rect = TRUE, rect_fill = TRUE, rect_border = "jco",
+          labels_track_height = 2.5)
+
+ind4.complete = cutree(hc.complete_2, 3)
+
+# Who are in the third cluster?
+data2[ind4.complete == 3,]
+```
+
