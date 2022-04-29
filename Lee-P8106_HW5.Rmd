@@ -13,6 +13,9 @@ library(ISLR)
 library(factoextra)
 ```
 
+## Problem 1: Auto Classifier using Support Vector Machine
+
+Load and tidy auto data, and split it into training and testing sets
 ```{r}
 data = read_csv("auto.csv", col_types = "fdiidfff") %>% 
   mutate(
@@ -26,8 +29,17 @@ rowTrain = createDataPartition(y = data$mpg_cat,
                                list = FALSE)
 ```
 
+Set 10 fold cross validation to optimize tuning parameters 
 ```{r}
 ctrl = trainControl(method = "cv")
+```
+
+a) 
+**Support Vector Classifier with Linear Kernel**
+
+The following is a fit using a linear kernel implemented by the `kernlab` package
+```{r}
+data.frame(C = exp(seq(-5, 2, len = 50)))
 
 # kernlab
 set.seed(2022)
@@ -35,28 +47,20 @@ svml.fit = train(mpg_cat ~ . ,
                  data = data[rowTrain,], 
                  method = "svmLinear",
                  # preProcess = c("center", "scale"),
-                 tuneGrid = data.frame(C = exp(seq(-5,2,len=50))),
+                 tuneGrid = data.frame(C = exp(seq(-5, 2, len = 50))),
                  trControl = ctrl)
 
 plot(svml.fit, highlight = TRUE, xTrans = log)
-
-# e1071
-set.seed(2022)
-svml.fit2 = train(mpg_cat ~ . , 
-                  data = data[rowTrain,], 
-                  method = "svmLinear2",
-                  tuneGrid = data.frame(cost = exp(seq(-5,2,len=50))),
-                  trControl = ctrl)
-
-plot(svml.fit2, highlight = TRUE, xTrans = log)
 ```
 
+b) 
+**Support Vector Classifier with Radial Kernel**
 
+The following is a fit using a radial kernel but tuning both over both cost and sigma.
 ```{r, fig.width=15, fig.height=8}
 svmr.grid = expand.grid(C = exp(seq(-1, 4, len = 20)),
                         sigma = exp(seq(-9, 0, len = 50)))
 
-# tunes over both cost and sigma
 set.seed(2022)             
 svmr.fit = train(mpg_cat ~ . ,
                  data = data, 
@@ -70,40 +74,10 @@ myPar = list(superpose.symbol = list(col = myCol),
              superpose.line = list(col = myCol))
 
 plot(svmr.fit, highlight = TRUE, par.settings = myPar)
-
-# tune over cost and uses a single value of sigma based on kernlab's sigest function
-set.seed(2022)             
-svmr.fit2 = train(mpg_cat ~ . ,
-                  data = data, 
-                  subset = rowTrain,
-                  method = "svmRadialCost",
-                  tuneGrid = data.frame(C = exp(seq(-3, 3, len = 20))),
-                  trControl = ctrl)
-
-# Platt’s probabilistic outputs; use with caution
-set.seed(2022)             
-svmr.fit3 = train(mpg_cat ~ . ,
-                  data = data, 
-                  subset = rowTrain,
-                  method = "svmRadialCost",
-                  tuneGrid = data.frame(C = exp(seq(-3, 3, len = 20))),
-                  trControl = ctrl,
-                  prob.model = TRUE) 
-# predict(svmr.fit3, newdata = x_test, type = "prob")
-
-set.seed(2022)             
-rpart.fit = train(mpg_cat ~ . , 
-                   data = data, 
-                   subset = rowTrain,
-                   method = "rpart",
-                   tuneLength = 50,
-                   trControl = ctrl)
 ```
 
 ```{r}
-resamp = resamples(list(svml = svml.fit, svml2 = svml.fit2,
-                        svmr = svmr.fit, svmr2 = svmr.fit2,
-                        svmr3 = svmr.fit3, rpart = rpart.fit))
+resamp = resamples(list(svml = svml.fit, svmr = svmr.fit))
 bwplot(resamp)
 ```
 
@@ -119,45 +93,83 @@ confusionMatrix(data = pred.svmr,
                 reference = data$mpg_cat[-rowTrain])
 ```
 
+## Problem 2: US State Classifier using Hierarchical Clustering 
+ 
 Load US Arrest dataset
 ```{r}
-data2 = 
-  USArrests
+data2 = USArrests
 ```
 
-```{r}
-hc.complete = hclust(dist(data2), method = "complete")
+a) 
+**Use hierarchical clustering with complete linkage and Euclidean distance for state clustering.**
 
-fviz_dend(hc.complete, k = 3,        
+Present the 3 cluster dendrogram
+```{r}
+# compute the 3 clusters of states
+hc_complete = hclust(dist(data2), method = "complete")
+
+# display
+fviz_dend(hc_complete, k = 3,        
           cex = 0.3, 
           palette = "jco", 
           color_labels_by_k = TRUE,
           rect = TRUE, rect_fill = TRUE, rect_border = "jco",
           labels_track_height = 2.5)
-
-ind4.complete = cutree(hc.complete, 3)
-
-# Who are in the third cluster?
-data2[ind4.complete == 3,]
 ```
 
+List the state belong in each cluster
 ```{r}
+# compute the 3 clusters of states (basically the above dendrogram in another format)
+state_clusters = cutree(hc_complete, 3)
+
+# record the states in each cluster
+cl1 = row.names(data2[state_clusters == 1,])
+cl2 = row.names(data2[state_clusters == 2,])
+cl3 = row.names(data2[state_clusters == 3,])
+
+# create a table to display cluster information
+table_height = max(length(cl1), length(cl2), length(cl3))
+cluster_table = data.frame(matrix(ncol = 3, nrow = table_height))
+colnames(cluster_table) = c("Cluster 1", "Cluster 2", "Cluster 3")
+cluster_table[1:length(cl1), 1] = cl1
+cluster_table[1:length(cl2), 2] = cl2
+cluster_table[1:length(cl3), 3] = cl3
+
+# display
+knitr::kable(cluster_table, "simple")
+```
+
+b) 
+**Standardize all the covariates for state prediction, and repeat the hierarchical clustering**
+
+```{r}
+# standardize (transform all within-variable variance to 1) the data
 data2_std = 
   USArrests %>% 
   mutate_all(~(scale(.) %>% as.vector))
 
-hc.complete_2 = hclust(dist(data2_std), method = "complete")
+# compute and display the 3 clusters of states
+hc_complete_std = hclust(dist(data2_std), method = "complete")
 
-fviz_dend(hc.complete_2, k = 3,        
+fviz_dend(hc_complete_std, k = 3,        
           cex = 0.3, 
           palette = "jco", 
           color_labels_by_k = TRUE,
           rect = TRUE, rect_fill = TRUE, rect_border = "jco",
           labels_track_height = 2.5)
 
-ind4.complete = cutree(hc.complete_2, 3)
+state_clusters_std = cutree(hc_complete_std, 3)
+cl1_std = row.names(data2[state_clusters_std == 1,])
+cl2_std = row.names(data2[state_clusters_std == 2,])
+cl3_std = row.names(data2[state_clusters_std == 3,])
 
-# Who are in the third cluster?
-data2[ind4.complete == 3,]
+table_height_std = max(length(cl1_std), length(cl2_std), length(cl3_std))
+cluster_table_std = data.frame(matrix(ncol = 3, nrow = table_height_std))
+colnames(cluster_table_std) = c("Cluster 1", "Cluster 2", "Cluster 3")
+cluster_table_std[1:length(cl1_std), 1] = cl1_std
+cluster_table_std[1:length(cl2_std), 2] = cl2_std
+cluster_table_std[1:length(cl3_std), 3] = cl3_std
+
+knitr::kable(cluster_table_std, "simple")
 ```
 
