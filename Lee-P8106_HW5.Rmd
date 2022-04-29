@@ -6,7 +6,7 @@ output: pdf_document
 ---
 
 Load packages
-```{r}
+```{r, message=F}
 library(tidyverse)
 library(caret)
 library(ISLR)
@@ -15,7 +15,7 @@ library(factoextra)
 
 ## Problem 1: Auto Classifier using Support Vector Machine
 
-Load and tidy auto data, and split it into training and testing sets
+Load and tidy the auto data, and split it into training and testing sets
 ```{r}
 data = read_csv("auto.csv", col_types = "fdiidfff") %>% 
   mutate(
@@ -34,12 +34,14 @@ Set 10 fold cross validation to optimize tuning parameters
 ctrl = trainControl(method = "cv")
 ```
 
+\newpage
+
 a) 
 **Support Vector Classifier with Linear Kernel**
 
 The following is a fit using a linear kernel implemented by the `kernlab` package
 ```{r}
-data.frame(C = exp(seq(-5, 2, len = 50)))
+svm1.grid = data.frame(C = exp(seq(-5, 2, len = 50)))
 
 # kernlab
 set.seed(2022)
@@ -47,19 +49,26 @@ svml.fit = train(mpg_cat ~ . ,
                  data = data[rowTrain,], 
                  method = "svmLinear",
                  # preProcess = c("center", "scale"),
-                 tuneGrid = data.frame(C = exp(seq(-5, 2, len = 50))),
+                 tuneGrid = svm1.grid,
                  trControl = ctrl)
 
 plot(svml.fit, highlight = TRUE, xTrans = log)
 ```
 
+The optimum cost is 1.154
+```{r}
+svml.fit$bestTune
+```
+
+\newpage
+
 b) 
 **Support Vector Classifier with Radial Kernel**
 
-The following is a fit using a radial kernel but tuning both over both cost and sigma.
-```{r, fig.width=15, fig.height=8}
+The following is a fit using a radial kernel, tuning over both cost and sigma
+```{r}
 svmr.grid = expand.grid(C = exp(seq(-1, 4, len = 20)),
-                        sigma = exp(seq(-9, 0, len = 50)))
+                        sigma = exp(seq(-7.5, 0, len = 50)))
 
 set.seed(2022)             
 svmr.fit = train(mpg_cat ~ . ,
@@ -76,12 +85,26 @@ myPar = list(superpose.symbol = list(col = myCol),
 plot(svmr.fit, highlight = TRUE, par.settings = myPar)
 ```
 
+The optimum cost and sigma are 1.054 and 0.216, respectively. 
 ```{r}
-resamp = resamples(list(svml = svml.fit, svmr = svmr.fit))
+svmr.fit$bestTune
+```
+
+\newpage
+ 
+Training accuracy and Cohen's Kappa coefficient comparison between the 2 SVMs (linear vs radial kernals). The higher the better. 
+```{r}
+resamp = resamples(list(linear = svml.fit, radial = svmr.fit))
+
+summary(resamp)
 bwplot(resamp)
 ```
 
-We finally look at the test data performance.
+The two SVMs have extremely similar mean and median training accuracies and $\kappa$ coefficients. The classifier using radial kernel edged out the linear kernel variant ever so slightly with a mean accuracy of 0.9312 and a mean $\kappa$ coefficient of 0.8624. Yet, the two are largely interchangeable in terms of classifying the training data at hand, and the decision should be based on other factors such as model interpretability. 
+
+\newpage 
+
+Testing data performance
 ```{r}
 pred.svml = predict(svml.fit, newdata = data[-rowTrain,])
 pred.svmr = predict(svmr.fit, newdata = data[-rowTrain,])
@@ -93,9 +116,13 @@ confusionMatrix(data = pred.svmr,
                 reference = data$mpg_cat[-rowTrain])
 ```
 
+The two SVMs also have extremely similar testing accuracies, both at 0.9224, confirming the expectation that they are virtually comparable. 
+
+\newpage
+
 ## Problem 2: US State Classifier using Hierarchical Clustering 
  
-Load US Arrest dataset
+Load the US Arrest dataset
 ```{r}
 data2 = USArrests
 ```
@@ -129,15 +156,19 @@ cl3 = row.names(data2[state_clusters == 3,])
 
 # create a table to display cluster information
 table_height = max(length(cl1), length(cl2), length(cl3))
-cluster_table = data.frame(matrix(ncol = 3, nrow = table_height))
+cluster_table = data.frame(matrix(ncol = 3, nrow = table_height)) %>% 
+  mutate(across(c(`X1`:`X3`), ~replace_na(.x, " ")))
 colnames(cluster_table) = c("Cluster 1", "Cluster 2", "Cluster 3")
 cluster_table[1:length(cl1), 1] = cl1
 cluster_table[1:length(cl2), 2] = cl2
 cluster_table[1:length(cl3), 3] = cl3
 
+
 # display
 knitr::kable(cluster_table, "simple")
 ```
+
+\newpage
 
 b) 
 **Standardize all the covariates for state prediction, and repeat the hierarchical clustering**
@@ -164,7 +195,8 @@ cl2_std = row.names(data2[state_clusters_std == 2,])
 cl3_std = row.names(data2[state_clusters_std == 3,])
 
 table_height_std = max(length(cl1_std), length(cl2_std), length(cl3_std))
-cluster_table_std = data.frame(matrix(ncol = 3, nrow = table_height_std))
+cluster_table_std = data.frame(matrix(ncol = 3, nrow = table_height_std)) %>% 
+  mutate(across(c(`X1`:`X3`), ~replace_na(.x, " ")))
 colnames(cluster_table_std) = c("Cluster 1", "Cluster 2", "Cluster 3")
 cluster_table_std[1:length(cl1_std), 1] = cl1_std
 cluster_table_std[1:length(cl2_std), 2] = cl2_std
@@ -173,3 +205,7 @@ cluster_table_std[1:length(cl3_std), 3] = cl3_std
 knitr::kable(cluster_table_std, "simple")
 ```
 
+c) 
+**Compare and interpret the non-standardized and standardized data**
+
+The 2 hierarchical clusters are different, because the varying spread of each predictor resulted in different weights on the clustering computation. Features with larger variance had more influence on the eventual grouping. Therefore, data standardization is beneficial for accurate clustering if no predictors should be preferred over others. Murder rate, assault count, proportion of population in urban areas and rape rate are given no order of significance when it comes to state grouping. As such, their different data units (a mix of percentage and count data) should be corrected by standardization before calculating the inter-observation dissimilarities to achieve a more fitting result. 
