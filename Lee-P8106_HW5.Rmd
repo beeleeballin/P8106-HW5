@@ -114,7 +114,7 @@ fviz_dend(hc_complete, k = 3,
           palette = "jco", 
           color_labels_by_k = TRUE,
           rect = TRUE, rect_fill = TRUE, rect_border = "jco",
-          labels_track_height = 2.5)
+          labels_track_height = 40)
 ```
 
 List the state belong in each cluster
@@ -156,7 +156,7 @@ fviz_dend(hc_complete_std, k = 3,
           palette = "jco", 
           color_labels_by_k = TRUE,
           rect = TRUE, rect_fill = TRUE, rect_border = "jco",
-          labels_track_height = 2.5)
+          labels_track_height = 0.5)
 
 state_clusters_std = cutree(hc_complete_std, 3)
 cl1_std = row.names(data2[state_clusters_std == 1,])
